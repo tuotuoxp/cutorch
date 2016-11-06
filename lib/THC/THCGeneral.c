@@ -11,65 +11,10 @@
 /* Size of scratch space available in global memory per each SM + stream */
 #define GLOBAL_SCRATCH_SPACE_PER_SM_STREAM 4 * sizeof(float)
 
-
-typedef struct _THCCudaResourcesPerDevice {
-  THCStream** streams;
-  cublasHandle_t* blasHandles;
-  /* Size of scratch space per each stream on this device available */
-  size_t scratchSpacePerStream;
-  /* Device-resident scratch space per stream, used for global memory
-     reduction kernels. */
-  void** devScratchSpacePerStream;
-} THCCudaResourcesPerDevice;
-
-struct THCState {
-  struct THCRNGState* rngState;
-  struct cudaDeviceProp* deviceProperties;
-  /* Set of all allocated resources. resourcePerDevice[dev]->streams[0] is NULL,
-     which specifies the per-device default stream. blasHandles do not have a
-     default and must be explicitly initialized. We always initialize 1
-     blasHandle but we can use more.
-  */
-  THCCudaResourcesPerDevice* resourcesPerDevice;
-  /* Captured number of devices upon startup; convenience for bounds checking */
-  int numDevices;
-  /* Number of Torch defined resources available, indices 1 ... numStreams */
-  int numUserStreams;
-  int numUserBlasHandles;
-
-  /* Allocator using cudaMallocHost. */
-  THAllocator* cudaHostAllocator;
-  THCDeviceAllocator* cudaDeviceAllocator;
-
-  /* Index of the current selected BLAS handle. The actual BLAS handle used
-     depends on the current device. */
-  THCThreadLocal/*<int>*/ currentPerDeviceBlasHandle;
-  /* Array of thread locals containing the current stream for each device */
-  THCThreadLocal* currentStreams;
-
-  /* Table of enabled peer-to-peer access between directed pairs of GPUs.
-     If i accessing allocs on j is enabled, p2pAccess[i][j] is 1; 0 otherwise. */
-  int** p2pAccessEnabled;
-
-  /* Is direct cross-kernel p2p access allowed? Normally, only cross-GPU
-     copies are allowed via p2p if p2p access is enabled at all for
-     the pair of GPUs in question, but if this flag is true, then
-     all cross-GPU access checks are disabled, allowing kernels to
-     directly access memory on another GPUs.
-     Note that p2p access must exist and be enabled for the pair of
-     GPUs in question. */
-  int p2pKernelAccessEnabled;
-
-  void (*cutorchGCFunction)(void *data);
-  void *cutorchGCData;
-  ptrdiff_t heapSoftmax;
-  ptrdiff_t heapDelta;
-};
-
 THCCudaResourcesPerDevice* THCState_getDeviceResourcePtr(
   THCState *state, int device);
 
-THCState* THCState_alloc()
+THCState* THCState_alloc(void)
 {
   THCState* state = (THCState*) malloc(sizeof(THCState));
   memset(state, 0, sizeof(THCState));
@@ -93,6 +38,7 @@ static cudaError_t cudaFreeWrapper(void* ctx, void* devPtr)
 
 static THCDeviceAllocator defaultDeviceAllocator = {
   &cudaMallocWrapper,
+  NULL,
   &cudaFreeWrapper,
   NULL,
   NULL
@@ -129,7 +75,10 @@ void THCudaInit(THCState* state)
   THCRandom_init(state, numDevices, device);
 
   state->cudaHostAllocator = (THAllocator*)malloc(sizeof(THAllocator));
-  THCAllocator_init(state->cudaHostAllocator);
+  THCAllocator_init(state);
+
+  state->cudaUVAAllocator = (THAllocator*)malloc(sizeof(THAllocator));
+  THCUVAAllocator_init(state->cudaUVAAllocator);
 
   /* Enable P2P access between all pairs, if possible */
   THCudaEnablePeerToPeerAccess(state);
@@ -175,6 +124,7 @@ void THCudaShutdown(THCState* state)
 
   free(state->rngState);
   free(state->cudaHostAllocator);
+  free(state->cudaUVAAllocator);
   free(state->deviceProperties);
 
   int deviceCount = 0;
@@ -261,17 +211,21 @@ void THCudaEnablePeerToPeerAccess(THCState* state)
         if (access) {
           cudaError_t err = cudaDeviceEnablePeerAccess(j, 0);
           if (err == cudaErrorPeerAccessAlreadyEnabled) {
+            /* It is possible that another thread has already enabled access. */
             /* Any future call to cudaGetLastError will now return an error, */
             /* even though we've already dealt with this specific error here. */
             /* Call cudaGetLastError once to reset the last error state. */
             cudaGetLastError();
-            continue;
+
+            /* The above should have cleared status */
+            THCudaCheck(cudaGetLastError());
+          } else {
+            /* In case there are other unhandled errors returned from the */
+            /* above */
+            THCudaCheck(err);
           }
 
-          /* In case there are unknown errors returned from the above */
-          THCudaCheck(err);
-
-          /* Access could be enabled */
+          /* Access could be enabled, or was already enabled */
           state->p2pAccessEnabled[i][j] = 1;
         }
       }
@@ -355,6 +309,11 @@ struct THCRNGState* THCState_getRngState(THCState *state)
 THAllocator* THCState_getCudaHostAllocator(THCState* state)
 {
   return state->cudaHostAllocator;
+}
+
+THAllocator* THCState_getCudaUVAAllocator(THCState* state)
+{
+  return state->cudaUVAAllocator;
 }
 
 void THCState_setDeviceAllocator(THCState* state, THCDeviceAllocator* allocator)
@@ -788,3 +747,6 @@ void THCHeapUpdate(THCState *state, ptrdiff_t size) {
 }
 
 #undef GLOBAL_SCRATCH_SPACE_PER_SM_STREAM
+
+#include "THCStorage.c"
+#include "THCAllocator.c"

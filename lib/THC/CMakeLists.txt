@@ -112,6 +112,7 @@ ELSE()
   SET(THC_INSTALL_CMAKE_SUBDIR ${Torch_INSTALL_CMAKE_SUBDIR})
 ENDIF()
 
+INCLUDE_DIRECTORIES("${CMAKE_CURRENT_SOURCE_DIR}")
 INCLUDE_DIRECTORIES("${CMAKE_CURRENT_BINARY_DIR}")
 CONFIGURE_FILE(THCGeneral.h.in "${CMAKE_CURRENT_BINARY_DIR}/THCGeneral.h")
 
@@ -122,10 +123,8 @@ ELSE()
 ENDIF()
 
 SET(src
-    THCAllocator.c
     THCCachingAllocator.cpp
     THCGeneral.c
-    THCStorage.c
     THCStorageCopy.c
     THCStream.c
     THCTensor.c
@@ -201,6 +200,7 @@ INSTALL(FILES
           THCStorage.h
           THCStorageCopy.h
           THCStream.h
+          THCThreadLocal.h
           THCTensor.h
           THCTensorCopy.h
           THCTensorRandom.h
@@ -268,10 +268,13 @@ INSTALL(FILES
           generic/THCTensorMathPointwise.cu
           generic/THCTensorMathReduce.h
           generic/THCTensorMathReduce.cu
+          generic/THCTensorMathScan.h
+          generic/THCTensorMathScan.cu
           generic/THCTensorScatterGather.h
           generic/THCTensorScatterGather.cu
           generic/THCTensorIndex.h
           generic/THCTensorIndex.cu
           generic/THCTensorSort.h
           generic/THCTensorSort.cu
+          generic/THCDeviceTensorUtils.cu
           DESTINATION "${THC_INSTALL_INCLUDE_SUBDIR}/THC/generic")

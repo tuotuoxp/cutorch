@@ -747,6 +747,14 @@ for k, Tensor_ in pairs(handledTypenames) do
             {name=Tensor},
             {name="index"}})
 
+    for _, name in ipairs({"cumsum", "cumprod"}) do
+        wrap(name,
+             cname(name),
+             {{name=Tensor, default=true, returned=true},
+                 {name=Tensor},
+                 {name="index", default=1}})
+    end
+
     wrap("prod",
          cname("prodall"),
          {{name=Tensor},
@@ -886,6 +894,11 @@ for k, Tensor_ in pairs(handledTypenames) do
 	    {name=Tensor .. "Array"},
 	    {name="index", default=lastdimarray(2)}})
 
+    wrap("nonzero",
+         cname("nonzero"),
+         {{name="CudaLongTensor", default=true, returned=true},
+             {name=Tensor}})
+
     if real == 'float' or real == 'double' or real == 'half' then
        for _,name in ipairs({"log", "log1p", "exp",
                              "cos", "acos", "cosh",
@@ -901,6 +914,16 @@ for k, Tensor_ in pairs(handledTypenames) do
                   {name=Tensor, method={default=1}}})
 
        end
+
+       wrap("pow",
+            cname("pow"),
+            {{name=Tensor, default=true, returned=true, method={default='nil'}},
+                {name=Tensor, method={default=1}},
+                {name=real}},
+            cname("tpow"),
+            {{name=Tensor, default=true, returned=true, method={default='nil'}},
+                {name = real},
+                {name=Tensor, method={default=1}}})
 
       wrap("norm",
            cname("normall"),
@@ -921,6 +944,14 @@ for k, Tensor_ in pairs(handledTypenames) do
             {name="index"},
             {name=real}})
 
+      wrap("dist",
+           cname("dist"),
+           {{name=Tensor},
+               {name=Tensor},
+               {name=real, default=2},
+               {name=accreal, creturned=true}})
+
+
       for _,name in ipairs({"var", "std"}) do
          wrap(name,
               cname(name .. "all"),
@@ -932,6 +963,31 @@ for k, Tensor_ in pairs(handledTypenames) do
                {name="index"},
                {name="boolean", default=false}})
       end
+
+      wrap("tril",
+           cname("tril"),
+           {{name=Tensor, default=true, returned=true},
+               {name=Tensor},
+               {name="int", default=0}})
+
+      wrap("triu",
+           cname("triu"),
+           {{name=Tensor, default=true, returned=true},
+               {name=Tensor},
+               {name="int", default=0}})
+
+      wrap("diag",
+           cname("diag"),
+           {{name=Tensor, default=true, returned=true},
+               {name=Tensor},
+               {name="int", default=0}})
+
+      wrap("trace",
+           cname("trace"),
+           {{name=Tensor},
+               {name=accreal, creturned=true}})
+
+
 
       wrap("lerp",
         cname("lerp"),
@@ -1078,7 +1134,7 @@ for k, Tensor_ in pairs(handledTypenames) do
          cname("dot"),
          {{name=Tensor},
             {name=Tensor},
-            {name=real, creturned=true}})
+            {name=accreal, creturned=true}})
 
     method:register("m_cutorch_" .. Tensor .. "Math__")
     interface:print(method:tostring())
@@ -1619,6 +1675,11 @@ wrap("cat",
      {{name=Tensor, default=true, returned=true},
       {name=Tensor .. "Array"},
       {name="index", default=lastdimarray(2)}})
+
+wrap("nonzero",
+     cname("nonzero"),
+     {{name="CudaLongTensor", default=true, returned=true},
+         {name=Tensor}})
 
 for _,f in ipairs({{name='geometric'},
                    {name='bernoulli', a=0.5}}) do
