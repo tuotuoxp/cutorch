@@ -896,6 +896,27 @@ function test.cpow()
    checkMultiDevice(x, 'cpow', y)
 end
 
+function test.nonzero()
+    local minsize = 10
+    local maxsize = 20
+    local dims = {chooseInt(minsize, maxsize)}
+    local threshold = 1 / 3
+    local flip = math.random()
+    while flip > threshold do
+        dims[#dims + 1] = chooseInt(minsize, maxsize)
+        flip = math.random()
+    end
+    local x = createTestTensorWithSizes(true, true, dims)
+    local randMask = torch.ByteTensor(unpack(dims)):bernoulli()
+    x:maskedFill(randMask, 0)
+    for k, typename in ipairs(typenames) do
+        local ctype = t2cpu[typename]
+        local x = x:type(ctype)
+        compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'nonzero')
+    end
+    checkMultiDevice(x, 'nonzero')
+end
+
 function test.cdiv()
    local sz1 = chooseInt(minsize, maxsize)
    local sz2 = chooseInt(minsize, maxsize)
@@ -1163,9 +1184,12 @@ function test.cumsum()
    local sz1 = chooseInt(minsize, maxsize)
    local sz2 = chooseInt(minsize, maxsize)
    local x = torch.FloatTensor():rand(sz1, sz2)
-   compareFloatAndCuda(x, 'cumsum')
-   compareFloatAndCuda(x, 'cumsum', 1)
-   compareFloatAndCuda(x, 'cumsum', 2)
+   for _, typename in ipairs(typenames) do
+       local x = x:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'cumsum');
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'cumsum', 1);
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'cumsum', 2);
+   end
    checkMultiDevice(x, 'cumsum')
    checkMultiDevice(x, 'cumsum', 1)
 end
@@ -1189,9 +1213,12 @@ function test.cumprod()
    local sz1 = chooseInt(minsize, maxsize)
    local sz2 = chooseInt(minsize, maxsize)
    local x = torch.FloatTensor():rand(sz1, sz2)
-   compareFloatAndCuda(x, 'cumprod')
-   compareFloatAndCuda(x, 'cumprod', 1)
-   compareFloatAndCuda(x, 'cumprod', 2)
+   for _, typename in ipairs(typenames) do
+       local x = x:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'cumprod');
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'cumprod', 1);
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'cumprod', 2);
+   end
    checkMultiDevice(x, 'cumprod')
    checkMultiDevice(x, 'cumprod', 1)
 end
@@ -1237,27 +1264,39 @@ function test.diag()
    local sz2 = chooseInt(minsize, maxsize)
    local k = chooseInt(-minsize, minsize)
    local x = torch.FloatTensor():rand(sz1, sz2)
-   compareFloatAndCudaTensorArgs(x, 'diag')
-   compareFloatAndCudaTensorArgs(x, 'diag', k)
+   for _, typename in ipairs(float_typenames) do
+       local x = x:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'diag')
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'diag', k)
+   end
    checkMultiDevice(x, 'diag')
    checkMultiDevice(x, 'diag', k)
 
    local y = torch.FloatTensor():rand(sz1)
-   compareFloatAndCudaTensorArgs(y, 'diag')
-   compareFloatAndCudaTensorArgs(y, 'diag', k)
+   for _, typename in ipairs(float_typenames) do
+       local y = x:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, y, 'diag')
+       compareCPUAndCUDATypeTensorArgs(typename, nil, y, 'diag', k)
+   end
    checkMultiDevice(y, 'diag')
    checkMultiDevice(y, 'diag', k)
 
    -- test non-contiguous cases
    local x1 = createTestTensorWithSizes(true, true, {sz1, sz2});
-   compareFloatAndCudaTensorArgs(x1, 'diag')
-   compareFloatAndCudaTensorArgs(x1, 'diag', k)
+   for _, typename in ipairs(float_typenames) do
+       local x1 = x1:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x1, 'diag')
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x1, 'diag', k)
+   end
    checkMultiDevice(x1, 'diag')
    checkMultiDevice(x1, 'diag', k)
 
    local y1 = createTestTensorWithSizes(true, true, {sz1});
-   compareFloatAndCudaTensorArgs(y1, 'diag')
-   compareFloatAndCudaTensorArgs(y1, 'diag', k)
+   for _, typename in ipairs(float_typenames) do
+       local y1 = y1:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, y1, 'diag')
+       compareCPUAndCUDATypeTensorArgs(typename, nil, y1, 'diag', k)
+   end
    checkMultiDevice(y1, 'diag')
    checkMultiDevice(y1, 'diag', k)
 end
@@ -1266,8 +1305,33 @@ function test.trace()
    local sz1 = chooseInt(minsize, maxsize)
    local sz2 = chooseInt(minsize, maxsize)
    local x = torch.FloatTensor():rand(sz1, sz2)
-   compareFloatAndCuda(x, 'trace')
+   for _, typename in ipairs(float_typenames) do
+       local x = x:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'trace')
+   end
    checkMultiDevice(x, 'trace')
+end
+
+function test.tril()
+   local sz1 = chooseInt(minsize, maxsize)
+   local sz2 = chooseInt(minsize, maxsize)
+   local x = torch.FloatTensor():rand(sz1, sz2)
+   for _, typename in ipairs(float_typenames) do
+       local x = x:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'tril')
+   end
+   checkMultiDevice(x, 'tril')
+end
+
+function test.triu()
+   local sz1 = chooseInt(minsize, maxsize)
+   local sz2 = chooseInt(minsize, maxsize)
+   local x = torch.FloatTensor():rand(sz1, sz2)
+   for _, typename in ipairs(float_typenames) do
+       local x = x:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'triu')
+   end
+   checkMultiDevice(x, 'triu')
 end
 
 -- Test element-wise unary operators with both one and two arguments.
@@ -1383,7 +1447,11 @@ function test.pow1()
    local sz2 = chooseInt(minsize, maxsize)
    local x = torch.FloatTensor():rand(sz1, sz2)
    local pow = torch.uniform(minvalue,maxvalue)
-   compareFloatAndCudaTensorArgs(x, 'pow', pow)
+   for k, typename in ipairs(float_typenames) do
+       local ctype = t2cpu[typename]
+       local x = x:type(ctype)
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'pow', pow)
+   end
    checkMultiDevice(x, 'pow', pow)
 end
 
@@ -1393,7 +1461,11 @@ function test.pow2()
    local x = torch.FloatTensor():rand(sz1, sz2)
    local y = torch.FloatTensor()
    local pow = torch.uniform(minvalue,maxvalue)
-   compareFloatAndCudaTensorArgs(y, 'pow', x, pow)
+   for k, typename in ipairs(float_typenames) do
+       local ctype = t2cpu[typename]
+       local x, y = x:type(ctype), y:type(ctype)
+       compareCPUAndCUDATypeTensorArgs(typename, nil, y, 'pow', x, pow)
+   end
    checkMultiDevice(y, 'pow', x, pow)
 end
 
@@ -1403,7 +1475,11 @@ function test.powExponentTensor()
    local pow = torch.uniform(minvalue,maxvalue)
    local x = torch.FloatTensor():rand(sz1, sz2)
    local y = torch.FloatTensor()
-   compareFloatAndCudaTensorArgs(y, 'pow', pow, x)
+   for k, typename in ipairs(float_typenames) do
+       local ctype = t2cpu[typename]
+       local x, y = x:type(ctype), y:type(ctype)
+       compareCPUAndCUDATypeTensorArgs(typename, nil, y, 'pow', pow, x)
+   end
    checkMultiDevice(y, 'pow', pow, x)
 end
 
@@ -1801,7 +1877,12 @@ function test.dist()
    local sz2 = chooseInt(minsize, maxsize)
    local x = torch.FloatTensor():rand(sz1, sz2)
    local y = torch.FloatTensor():rand(sz1, sz2)
-   compareFloatAndCudaTensorArgs(x, 'dist', y)
+   for _, typename in ipairs(float_typenames) do
+       local x = x:type(t2cpu[typename])
+       local y = y:type(t2cpu[typename])
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'dist', y)
+       compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'dist', y, 3)
+   end
    checkMultiDevice(x, 'dist', y)
 end
 
@@ -3261,7 +3342,7 @@ function test.cat()
 end
 
 function test.catArray()
-   for k, typename in ipairs(typenames) do   
+   for k, typename in ipairs(typenames) do
       for dim = 1, 3 do
 	 local x = torch.Tensor(13, minsize, minsize):uniform()
 	    :type(typename):transpose(1, dim)
