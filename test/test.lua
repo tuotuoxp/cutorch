@@ -1001,6 +1001,81 @@ function test.addcdiv()
    checkMultiDevice(r, 'addcdiv', x, torch.uniform(), y, z)
 end
 
+function test.fmod()
+   local sz1 = chooseInt(minsize, maxsize)
+   local sz2 = chooseInt(minsize, maxsize)
+   local x = torch.FloatTensor():randn(sz1, sz2)
+   x:apply(function(x)
+       x = x * torch.random(1, 100)
+       return x
+   end)
+   local r = torch.normal(0, 25)
+   print(x, r)
+
+   for _, typename in ipairs(typenames) do
+      local x = x:type(t2cpu[typename])
+      compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'fmod', r)
+   end
+end
+
+function test.remainder()
+   local sz1 = chooseInt(minsize, maxsize)
+   local sz2 = chooseInt(minsize, maxsize)
+   local x = torch.FloatTensor():randn(sz1, sz2)
+   x:apply(function(x)
+       x = x * torch.random(1, 100)
+       return x
+   end)
+   local r = torch.normal(0, 25)
+   print(x, r)
+
+   for _, typename in ipairs(typenames) do
+      local x = x:type(t2cpu[typename])
+      compareCPUAndCUDATypeTensorArgs(typename, nil, x, 'remainder', r)
+   end
+end
+
+function test.equal()
+    -- empty tensors are equal
+    local x = torch.FloatTensor()
+    local y = torch.FloatTensor()
+
+    for _, typename in ipairs(typenames) do
+        local a = x:type(typename)
+        local b = y:type(typename)
+        tester:assert(a:equal(b), 'Empty Tensors should be considered equal')
+    end
+
+    -- mismatched size tensors are not equal
+    local x = torch.FloatTensor(5):fill(1)
+    local y = torch.FloatTensor(3):fill(1)
+
+    for _, typename in ipairs(typenames) do
+        local a = x:type(typename)
+        local b = y:type(typename)
+        tester:assert(not a:equal(b), 'Tensors of different sizes not equal')
+    end
+
+    -- tensors of same size but different value are not equal
+    local sz1 = chooseInt(minsize, maxsize)
+    local sz2 = chooseInt(minsize, maxsize)
+    local x = torch.FloatTensor(sz1, sz2):apply(function() return torch.random(0, 255) end)
+    local y = torch.add(x, 1)
+
+    for _, typename in ipairs(typenames) do
+        local a = x:type(typename)
+        local b = y:type(typename)
+        tester:assert(not a:equal(b), 'Tensors should not be equal')
+    end
+
+    -- actual equality
+    for _, typename in ipairs(typenames) do
+        local a = x:type(typename)
+        local b = x:type(typename)
+        tester:assert(a:equal(b), 'Tensors should be equal')
+    end
+end
+
 function test.logicalValue()
    local sz1 = chooseInt(minsize, maxsize)
    local sz2 = chooseInt(minsize, maxsize)
@@ -2325,19 +2400,26 @@ end
 
 function test.inverse()
    local a = torch.eye(5):add(torch.Tensor(5, 5):uniform(-0.1, 0.1))
-   local i1 = torch.inverse(a)
-   local i2 = torch.inverse(a:cuda())
-   tester:assertle((i2 - i1:cuda()):abs():max(), 1e-5, "wrong inverse answer")
+   for _, typename in ipairs({'torch.DoubleTensor', 'torch.FloatTensor'}) do
+       local at = a:type(typename)
+       local i1 = torch.inverse(at)
+       local i2 = torch.inverse(a:cuda())
+       tester:assertle((i2 - i1:cuda()):abs():max(), 1e-5, "wrong inverse answer")
+   end
 end
 
 if cutorch.magma then
    function test.gesv()
       local a = torch.Tensor(5, 5):uniform(-1, 1)
       local b = torch.Tensor(5, 3):uniform(-1, 1)
-      local rb1, ra1 = torch.gesv(b, a)
-      local rb2, ra2 = torch.gesv(b:cuda(), a:cuda())
-      tester:assertle((rb2 - rb1:cuda()):abs():max(), 1e-5, "wrong gesv answer")
-      tester:assertle((ra2 - ra1:cuda()):abs():max(), 1e-5, "wrong gesv answer")
+      for _, typename in ipairs({'torch.DoubleTensor', 'torch.FloatTensor'}) do
+          local at = a:type(typename)
+          local bt = b:type(typename)
+          local rb1, ra1 = torch.gesv(bt, at)
+          local rb2, ra2 = torch.gesv(bt:cuda(), at:cuda())
+          tester:assertle((rb2 - rb1:cuda()):abs():max(), 1e-5, "wrong gesv answer")
+          tester:assertle((ra2 - ra1:cuda()):abs():max(), 1e-5, "wrong gesv answer")
+      end
    end
 
    function test.gels()
@@ -2355,10 +2437,14 @@ if cutorch.magma then
          { 0.5360, 0.2048, 0.2745},
          { 0.8535,-0.3938,-0.2140},
       }
-      local rb1, ra1 = torch.gels(b, a)
-      local rb2, ra2 = torch.gels(b:cuda(), a:cuda())
-      tester:assertle((rb2 - rb1:cuda()):abs():max(), 5e-4, "wrong gels answer")
-      tester:assertle((ra2 - ra1:cuda()):abs():max(), 5e-4, "wrong gels answer")
+      for _, typename in ipairs({'torch.DoubleTensor', 'torch.FloatTensor'}) do
+          local at = a:type(typename)
+          local bt = b:type(typename)
+          local rb1, ra1 = torch.gels(bt, at)
+          local rb2, ra2 = torch.gels(bt:cuda(), at:cuda())
+          tester:assertle((rb2 - rb1:cuda()):abs():max(), 5e-4, "wrong gels answer")
+          tester:assertle((ra2 - ra1:cuda()):abs():max(), 5e-4, "wrong gels answer")
+      end
    end
 
    function test.symeig()
@@ -2367,10 +2453,13 @@ if cutorch.magma then
                               {-0.47, -6.39,  4.17,  0.00,  0.00},
                               {-7.20,  1.50, -1.51,  5.70,  0.00},
                               {-0.65, -6.34,  2.67,  1.80, -7.10}}):t()
-      local e1,v1 = torch.symeig(a, 'V')
-      local e2,v2 = torch.symeig(a:cuda(), 'V')
-      tester:assertle((e2 - e1:cuda()):abs():max(), 1e-5, "wrong symeig answer")
-      tester:assertle((v2 - v1:cuda()):abs():max(), 1e-5, "wrong symeig answer")
+      for _, typename in ipairs({'torch.DoubleTensor', 'torch.FloatTensor'}) do
+          local at = a:type(typename)
+          local e1,v1 = torch.symeig(at, 'V')
+          local e2,v2 = torch.symeig(at:cuda(), 'V')
+          tester:assertle((e2 - e1:cuda()):abs():max(), 1e-5, "wrong symeig answer")
+          tester:assertle((v2 - v1:cuda()):abs():max(), 1e-5, "wrong symeig answer")
+      end
    end
 
    function test.eig()
@@ -2381,10 +2470,13 @@ if cutorch.magma then
          { 0.5766, -0.6743,  0.6903, 0.3646, -0.4571},
          {-0.8956, -0.4074, -0.7583, 0.1838, -0.0091},
       }
-      local e1,v1 = torch.eig(a, 'V')
-      local e2,v2 = torch.eig(a:cuda(), 'V')
-      tester:assertle((e2 - e1:cuda()):abs():max(), 1e-6, "wrong eig answer")
-      tester:assertle((v2:abs() - v1:abs():cuda()):abs():max(), 1e-6, "wrong eig answer")
+      for _, typename in ipairs({'torch.DoubleTensor', 'torch.FloatTensor'}) do
+          local at = a:type(typename)
+          local e1,v1 = torch.eig(at, 'V')
+          local e2,v2 = torch.eig(at:cuda(), 'V')
+          tester:assertle((e2 - e1:cuda()):abs():max(), 1e-6, "wrong eig answer")
+          tester:assertle((v2:abs() - v1:abs():cuda()):abs():max(), 1e-6, "wrong eig answer")
+      end
    end
 
    function test.svd()
@@ -2395,17 +2487,20 @@ if cutorch.magma then
          {5.45, -0.27,  4.85,  0.74, 10.00, -6.02},
          {3.16,  7.98,  3.01,  5.80,  4.27, -5.31}}
 
-      local u,s,v = torch.svd(a, 'A')
+      for _, typename in ipairs({'torch.CudaDoubleTensor', 'torch.CudaTensor'}) do
+          local at = a:type(typename)
+          local u,s,v = torch.svd(a, 'A')
 
-      local temp = torch.Tensor(a:size(2)):zero()
-      temp:narrow(1, 1, a:size(1)):copy(s)
-      local sigma = torch.diag(temp):resize(a:size(1), a:size(2)):cuda()
+          local temp = torch.Tensor(a:size(2)):zero()
+          temp:narrow(1, 1, a:size(1)):copy(s)
+          local sigma = torch.diag(temp):resize(a:size(1), a:size(2)):cuda()
 
-      local m = u * sigma * v:t()
+          local m = u * sigma * v:t()
 
-      tester:assertle((m - a):abs():max(), 1e-5, "svd: a != u * s * vT")
-      tester:assertle((u*u:t() - torch.eye(a:size(1)):cuda()):abs():max(), 1e-6, "svd: u should be unitary")
-      tester:assertle((v*v:t() - torch.eye(a:size(2)):cuda()):abs():max(), 1e-6, "svd: v should be unitary")
+          tester:assertle((m - a):abs():max(), 1e-5, "svd: a != u * s * vT")
+          tester:assertle((u*u:t() - torch.eye(a:size(1)):cuda()):abs():max(), 1e-6, "svd: u should be unitary")
+          tester:assertle((v*v:t() - torch.eye(a:size(2)):cuda()):abs():max(), 1e-6, "svd: v should be unitary")
+      end
    end
 
 
@@ -2419,11 +2514,18 @@ if cutorch.magma then
       }
       A = A * A:t()
 
-      local i1 = torch.potri(A)
-      local i2 = torch.potri(A:cuda())
-      local M = A:cuda() * i2
-      tester:assertle((i2 - i1:cuda()):abs():max(), 1e-5, "wrong potri answer")
-      tester:assertle((M - torch.eye(A:size(1)):cuda()):abs():max(), 1e-5, "potri not an inverse")
+      for _, typename in ipairs({'torch.DoubleTensor', 'torch.FloatTensor'}) do
+          local at = A:type(typename)
+          for _, triarg in ipairs({'U', 'L'}) do
+              local chol  = torch.potrf(at, triarg)
+
+              local i1 = torch.potri(chol, triarg)
+              local i2 = torch.potri(chol:cuda(), triarg)
+              local M = at:cuda() * i2
+              tester:assertle((i2 - i1:cuda()):abs():max(), 1e-5, "wrong potri answer")
+              tester:assertle((M - torch.eye(at:size(1)):cuda()):abs():max(), 1e-5, "potri not an inverse")
+          end
+      end
    end
 
    function test.potrf()
@@ -2434,9 +2536,14 @@ if cutorch.magma then
          {-0.6738, 0.4734,-1.1123, 2.4071,-1.2756},
          {-3.3883, 0.2807, 0.8161,-1.2756, 4.3415},
       }
-      local i1 = torch.potrf(A)
-      local i2 = torch.potrf(A:cuda())
-      tester:assertle((i2 - i1:cuda()):abs():max(), 1e-5, "wrong potrf answer")
+      for _, typename in ipairs({'torch.DoubleTensor', 'torch.FloatTensor'}) do
+          local at = A:type(typename)
+          for _, triarg in ipairs({'U', 'L'}) do
+              local i1 = torch.potrf(at, triarg)
+              local i2 = torch.potrf(at:cuda(), triarg)
+              tester:assertle((i2 - i1:cuda()):abs():max(), 1e-5, "wrong potrf answer")
+          end
+      end
    end
 
    function test.potrs()
@@ -2452,10 +2559,16 @@ if cutorch.magma then
         {0.2334,  0.8594,  0.4103},
         {0.7556,  0.1966,  0.9637},
         {0.1420,  0.7185,  0.7476}})
-      local chol = torch.potrf(A)
-      local solve1 = torch.potrs(B, chol)
-      local solve2 = torch.potrs(B:cuda(), chol:cuda())
-      tester:assertle((solve2 - solve1:cuda()):abs():max(), 1e-4, "wrong potrs answer")
+      for _, typename in ipairs({'torch.DoubleTensor', 'torch.FloatTensor'}) do
+          local at = A:type(typename)
+          local bt = B:type(typename)
+          for _, triarg in ipairs({'U', 'L'}) do
+              local chol = torch.potrf(at, triarg)
+              local solve1 = torch.potrs(bt, chol, triarg)
+              local solve2 = torch.potrs(bt:cuda(), chol:cuda(), triarg)
+              tester:assertle((solve2 - solve1:cuda()):abs():max(), 1e-4, "wrong potrs answer")
+          end
+      end
    end
 
    function test.qr()
@@ -2466,10 +2579,13 @@ if cutorch.magma then
          {-0.2987,  1.9035, -1.4192, -0.9738,  1.4384},
          {-0.5315,  0.4958,  0.4449, -0.4676, -0.4878},
       }
-      local q1,r1 = torch.qr(A)
-      local q2,r2 = torch.qr(A:cuda())
-      tester:assertle((q2 - q1:cuda()):abs():max(), 1e-5, "wrong qr answer")
-      tester:assertle((r2 - r1:cuda()):abs():max(), 1e-5, "wrong qr answer")
+      for _, typename in ipairs({'torch.DoubleTensor', 'torch.FloatTensor'}) do
+          local at = A:type(typename)
+          local q1,r1 = torch.qr(at)
+          local q2,r2 = torch.qr(at:cuda())
+          tester:assertle((q2 - q1:cuda()):abs():max(), 1e-5, "wrong qr answer")
+          tester:assertle((r2 - r1:cuda()):abs():max(), 1e-5, "wrong qr answer")
+      end
    end
 end
 
@@ -2526,8 +2642,11 @@ function test.uniform()
    local max = min + torch.uniform()
    local t = torch.CudaTensor(sz1, sz2)
 
-   t:uniform(min, max)
-   checkIfUniformlyDistributed(t, min, max)
+   for _, typename in ipairs(float_typenames) do
+       local x = t:type(typename)
+       x:uniform(min, max)
+       checkIfUniformlyDistributed(x, min, max)
+   end
    checkMultiDevice(t, 'uniform', min, max)
 end
 
@@ -2537,13 +2656,17 @@ function test.bernoulli()
    local p = torch.uniform()
    local t = torch.CudaTensor(sz1, sz2)
 
-   t:bernoulli(p)
-   tester:assertalmosteq(t:mean(), p, 0.1, "mean is not equal to p")
-   local f = t:float()
-   tester:assertTensorEq(f:eq(1):add(f:eq(0)):float(),
-                         torch.FloatTensor(sz1, sz2):fill(1),
-                         1e-6,
-                         "each value must be either 0 or 1")
+   for _, typename in ipairs(typenames) do
+       local x = t:type(typename)
+       x:bernoulli(p)
+       local mean = x:sum() / (sz1 * sz2)
+       tester:assertalmosteq(mean, p, 0.1, "mean is not equal to p")
+       local f = x:float()
+       tester:assertTensorEq(f:eq(1):add(f:eq(0)):float(),
+                             torch.FloatTensor(sz1, sz2):fill(1),
+                             1e-6,
+                             "each value must be either 0 or 1")
+   end
    checkMultiDevice(t, 'bernoulli', p)
 end
 
@@ -2554,9 +2677,13 @@ function test.normal()
    local tolerance = 0.01
    local t = torch.CudaTensor(sz1, sz2)
 
-   t:normal(mean, std)
-   tester:assertalmosteq(t:mean(), mean, tolerance, "mean is wrong")
-   tester:assertalmosteq(t:std(), std, tolerance, "standard deviation is wrong")
+   for _, typename in ipairs(float_typenames) do
+       local x = t:type(t2cpu[typename])
+       x:normal(mean, std)
+       tester:assertalmosteq(x:mean(), mean, tolerance, "mean is wrong")
+       tester:assertalmosteq(x:std(), std, tolerance, "standard deviation is wrong")
+   end
+
    checkMultiDevice(t, 'normal', mean, std)
 end
 
@@ -2567,23 +2694,34 @@ function test.logNormal()
    local tolerance = 0.01
    local t = torch.CudaTensor(sz1, sz2)
 
-   t:logNormal(mean, std)
-   local logt = t:log()
-   tester:assertalmosteq(logt:mean(), mean, tolerance, "mean is wrong")
-   tester:assertalmosteq(logt:std(), std, tolerance, "standard deviation is wrong")
+   for _, typename in ipairs(float_typenames) do
+       local x = t:type(typename)
+       x:logNormal(mean, std)
+       local logt = x:log()
+       tester:assertalmosteq(logt:mean(), mean, tolerance, "mean is wrong")
+       tester:assertalmosteq(logt:std(), std, tolerance, "standard deviation is wrong")
+   end
    checkMultiDevice(t, 'logNormal', mean, std)
 end
 
 function test.geometric()
    local sz1 = chooseInt(minsize, maxsize)
    local sz2 = chooseInt(minsize, maxsize)
-   local p = torch.uniform()
-   local t = torch.CudaTensor(sz1, sz2)
 
-   t:geometric(p)
-   local u = torch.FloatTensor(sz1, sz2):fill(1) -
-                 ((t:float() - 1) * math.log(p)):exp()
-   checkIfUniformlyDistributed(u, 0, 1)
+   -- unlike other tests, we pick a large p-value to lower the variance, so
+   -- that its highly unlikely the mean falls outside the bounds of the
+   -- specified tolerance
+   local p = 0.8
+   local tolerance = 0.2
+
+   local t = torch.CudaTensor(sz1, sz2)
+   local mean = (1 / p)
+
+   for _, typename in ipairs(float_typenames) do
+       local x = t:type(typename)
+       x:geometric(p)
+       tester:assertalmosteq(x:mean(), mean, tolerance, "mean is wrong")
+   end
    checkMultiDevice(t, 'geometric', p)
 end
 
@@ -2593,10 +2731,13 @@ function test.exponential()
    local lambda = torch.uniform()
    local t = torch.CudaTensor(sz1, sz2)
 
-   t:exponential(lambda)
-   local u = torch.FloatTensor(sz1, sz2):fill(1) -
-                 (t:float() * -lambda):exp()
-   checkIfUniformlyDistributed(u, 0, 1)
+   for _, typename in ipairs(float_typenames) do
+       local x = t:type(t2cpu[typename])
+       x:exponential(lambda)
+       local u = torch.FloatTensor(sz1, sz2):fill(1) -
+                     (x:float() * -lambda):exp()
+       checkIfUniformlyDistributed(u, 0, 1)
+   end
    checkMultiDevice(t, 'exponential', lambda)
 end
 
@@ -2606,9 +2747,12 @@ function test.cauchy()
    local median, sigma = torch.uniform(), torch.uniform()
    local t = torch.CudaTensor(sz1, sz2)
 
-   t:cauchy(median, sigma)
-   local u = ((t:float() - median) / sigma):atan() / math.pi + 0.5
-   checkIfUniformlyDistributed(u, 0, 1)
+   for _, typename in ipairs(float_typenames) do
+       local x = t:type(typename)
+       x:cauchy(median, sigma)
+       local u = ((x:float() - median) / sigma):atan() / math.pi + 0.5
+       checkIfUniformlyDistributed(u, 0, 1)
+   end
    checkMultiDevice(t, 'cauchy', median, sigma)
 end
 
@@ -2675,16 +2819,19 @@ function test.multinomial_with_replacement()
       local prob_dist = torch.CudaTensor(n_row, n_col):uniform()
       prob_dist:select(2, n_col):fill(0) --index n_col shouldn't be sampled
       local n_sample = torch.random(n_col - 1)
-      local sample_indices = torch.multinomial(prob_dist, n_sample, true)
-      tester:assert(sample_indices:dim() == 2, "wrong sample_indices dim")
-      tester:assert(sample_indices:size(2) == n_sample, "wrong number of samples")
+      for _, typename in ipairs(float_typenames) do
+          local pd = prob_dist:type(typename)
+          local sample_indices = torch.multinomial(pd, n_sample, true)
+          tester:assert(sample_indices:dim() == 2, "wrong sample_indices dim")
+          tester:assert(sample_indices:size(2) == n_sample, "wrong number of samples")
 
-      for i = 1, n_row do
-         for j = 1, n_sample do
-            local val = sample_indices[{i,j}]
-            tester:assert(val == math.floor(val) and val >= 1 and val < n_col,
-                          "sampled an invalid index: " .. val)
-         end
+          for i = 1, n_row do
+             for j = 1, n_sample do
+                local val = sample_indices[{i,j}]
+                tester:assert(val == math.floor(val) and val >= 1 and val < n_col,
+                              "sampled an invalid index: " .. val)
+             end
+          end
       end
    end
 end
@@ -2698,24 +2845,27 @@ function test.multinomial_without_replacement()
       local prob_dist = torch.CudaTensor(n_row, n_col):uniform()
       prob_dist:select(2, n_col):fill(0) --index n_col shouldn't be sampled
       local n_sample = torch.random(n_col - 1)
-      local sample_indices = torch.multinomial(prob_dist, n_sample, false)
-      tester:assert(sample_indices:dim() == 2, "wrong sample_indices dim")
-      tester:assert(sample_indices:size(2) == n_sample, "wrong number of samples")
+      for _, typename in ipairs(float_typenames) do
+          local pd = prob_dist:type(typename)
+          local sample_indices = torch.multinomial(pd, n_sample, false)
+          tester:assert(sample_indices:dim() == 2, "wrong sample_indices dim")
+          tester:assert(sample_indices:size(2) == n_sample, "wrong number of samples")
 
-      sample_indices = sample_indices:float()
+          sample_indices = sample_indices:float()
 
-      for i = 1, n_row do
-         local row_samples = {}
-         for j = 1, n_sample do
-            local sample_idx = sample_indices[{i,j}]
-            tester:assert(
-               sample_idx ~= n_col, "sampled an index with zero probability"
-            )
-            tester:assert(
-                  not row_samples[sample_idx], "sampled an index twice"
-            )
-            row_samples[sample_idx] = true
-         end
+          for i = 1, n_row do
+             local row_samples = {}
+             for j = 1, n_sample do
+                local sample_idx = sample_indices[{i,j}]
+                tester:assert(
+                   sample_idx ~= n_col, "sampled an index with zero probability"
+                )
+                tester:assert(
+                      not row_samples[sample_idx], "sampled an index twice"
+                )
+                row_samples[sample_idx] = true
+             end
+          end
       end
    end
 end
@@ -2731,17 +2881,25 @@ function test.multinomial_without_replacement_gets_all()
          t[dist] = linear
       end
 
-      local orig = t:clone()
+      local orig = t:clone():long()
 
-      -- Sample without replacement
-      local result = torch.multinomial(t, distSize)
-      tester:assert(result:size(1) == distributions)
-      tester:assert(result:size(2) == distSize)
+      for _, typename in ipairs(float_typenames) do
+          -- Half tensors have precision errors for the binary search causing this test
+          -- to fail frequently
+          if typename ~= 'torch.CudaHalfTensor' then
+              local x = t:type(typename)
 
-      -- Sort, and we should have the original results, since without replacement
-      -- sampling everything, we should have chosen every value uniquely
-      result = result:sort(2)
-      tester:assertTensorEq(orig, result, 0, "error in multinomial_without_replacement_gets_all")
+              -- Sample without replacement
+              local result = torch.multinomial(x, distSize)
+              tester:assert(result:size(1) == distributions)
+              tester:assert(result:size(2) == distSize)
+
+              -- Sort, and we should have the original results, since without replacement
+              -- sampling everything, we should have chosen every value uniquely
+              result = result:sort(2)
+              tester:assertTensorEq(orig:type(typename), result, 0, "error in multinomial_without_replacement_gets_all")
+          end
+      end
    end
 end
 
@@ -2749,12 +2907,15 @@ function test.multinomial_vector()
    local n_col = torch.random(100)
    local prob_dist = torch.CudaTensor(n_col):uniform()
    local n_sample = n_col
-   local sample_indices = torch.multinomial(prob_dist, n_sample, true)
-   tester:assert(sample_indices:dim() == 1, "wrong sample_indices dim")
-   -- Multinomial resizes prob_dist to be 2d (1xn), check that the resize
-   -- was undone
-   tester:assert(prob_dist:dim() == 1, "wrong number of prob_dist dimensions")
-   tester:assert(sample_indices:size(1) == n_sample, "wrong number of samples")
+   for _, typename in ipairs(float_typenames) do
+       local pd = prob_dist:type(typename)
+       local sample_indices = torch.multinomial(pd, n_sample, true)
+       tester:assert(sample_indices:dim() == 1, "wrong sample_indices dim")
+       -- Multinomial resizes prob_dist to be 2d (1xn), check that the resize
+       -- was undone
+       tester:assert(prob_dist:dim() == 1, "wrong number of prob_dist dimensions")
+       tester:assert(sample_indices:size(1) == n_sample, "wrong number of samples")
+   end
 end
 
 function test.get_device()
